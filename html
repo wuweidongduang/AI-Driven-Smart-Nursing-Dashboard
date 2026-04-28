@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>病区护理数字大屏 v1.0.0</title>
+    <style>
+        :root {
+            --bg-color: #0e2a47;
+            --panel-bg: #1a3d5c;
+            --card-bg: #234b6e;
+            --text-primary: #e0f0ff;
+            --text-secondary: #8faabc;
+            --accent-blue: #00f0ff;
+            --accent-green: #00e676;
+            --alert-red: #ff4d4f;
+            --alert-yellow: #ffeb3b;
+            --nursing-special: #ff4d4f;
+            --nursing-1: #ffeb3b;
+            --nursing-2: #00e676;
+            --nursing-3: #8faabc;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Microsoft YaHei', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* === 布局骨架 === */
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 10px;
+            gap: 10px;
+        }
+
+        /* 顶部 T区 */
+        .header-t {
+            height: 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--panel-bg);
+            border-radius: 6px;
+            padding: 0 20px;
+            position: relative;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .stats-group {
+            display: flex;
+            gap: 20px;
+            z-index: 2;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--accent-blue);
+        }
+
+        /* 走马灯预警带 */
+        .marquee-container {
+            position: absolute;
+            top: 0;
+            left: 300px;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+        }
+
+        .marquee-content {
+            display: flex;
+            gap: 50px;
+            white-space: nowrap;
+            animation: marquee 20s linear infinite;
+        }
+
+        .alert-item {
+            color: var(--alert-red);
+            font-weight: bold;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        @keyframes marquee {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+
+        /* 主体区 */
+        .main-content {
+            display: flex;
+            flex: 1;
+            gap: 10px;
+            min-height: 0;
+        }
+
+        /* 左侧 L区 */
+        .left-l {
+            flex: 7;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 40px;
+        }
+
+        .filter-group, .action-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            background: var(--card-bg);
+            border: 1px solid var(--text-secondary);
+            color: var(--text-primary);
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .btn:hover, .btn.active {
+            background: var(--accent-blue);
+            color: var(--bg-color);
+            border-color: var(--accent-blue);
+        }
+
+        .btn-danger {
+            border-color: var(--alert-red);
+            color: var(--alert-red);
+        }
+        .btn-danger:hover {
+            background: var(--alert-red);
+            color: white;
+        }
+
+        /* 床位图网格 */
+        .bed-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            overflow-y: auto;
+            flex: 1;
+            padding-right: 5px;
+        }
+
+        .bed-grid::-webkit-scrollbar {
+            width: 6px;
+        }
+        .bed-grid::-webkit-scrollbar-thumb {
+            background: var(--text-secondary);
+            border-radius: 3px;
+        }
+
+        .bed-card {
+            background: var(--card-bg);
+            border-radius: 6px;
+            padding: 10px;
+            position: relative;
+            border-left: 4px solid var(--nursing-3);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .bed-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .bed-card.empty {
+            background: rgba(26, 61, 92, 0.3);
+            border-left-color: #4a4a4a;
+            cursor: default;
+        }
+
+        .bed-card.empty:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* 护理级别色条 */
+        .level-special { border-left-color: var(--nursing-special); }
+        .level-1 { border-left-color: var(--nursing-1); }
+        .level-2 { border-left-color: var(--nursing-2); }
+        .level-3 { border-left-color: var(--nursing-3); }
+
+        /* 闪烁预警 */
+        .bed-card.alert-blink {
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0% { box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.8); }
+            50% { box-shadow: 0 0 15px 5px rgba(255, 77, 79, 0.5); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.8); }
+        }
+
+        .bed-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 4px;
+        }
+
+        .bed-no { font-size: 18px; font-weight: bold; }
+        .level-tag { font-size: 12px; padding: 2px 6px; border-radius: 2px; color: var(--bg-color); font-weight: bold; }
+        .tag-special { background: var(--nursing-special); }
+        .tag-1 { background: var(--nursing-1); }
+        .tag-2 { background: var(--nursing-2); }
+
+        .patient-name { font-size: 16px; font-weight: bold; margin-right: 5px; }
+        .patient-info { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+        
+        .status-icons {
+            display: flex;
+            gap: 5px;
+            margin-top: 5px;
+        }
+
+        .icon-badge {
+            font-size: 11px;
+            padding: 1px 4px;
+            border-radius: 2px;
+            background: rgba(255,255,255,0.1);
+        }
+        .icon-fever { color: var(--alert-red); }
+        .icon-surgery { color: var(--accent-blue); }
+        .icon-allergy { color: var(--alert-yellow); }
+
+        /* 右侧动态区 */
+        .right-dynamic {
+            flex: 3;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .dynamic-card {
+            background: var(--panel-bg);
+            border-radius: 6px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .dynamic-title {
+            font-size: 14px;
+            color: var(--accent-blue);
+            border-left: 3px solid var(--accent-blue);
+            padding-left: 8px;
+            margin-bottom: 10px;
+        }
+
+        .dynamic-list {
+            flex: 1;
+            overflow: hidden;
+            font-size: 13px;
+        }
+
+        .dynamic-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px dashed rgba(255,255,255,0.1);
+        }
+
+        .staff-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .staff-item {
+            background: var(--card-bg);
+            padding: 6px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 12px;
+        }
+
+        /* === 浮层与弹窗 === */
+        .overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .overlay.active { display: flex; }
+
+        /* 患者详情弹窗 */
+        .detail-modal {
+            background: var(--panel-bg);
+            width: 800px;
+            max-height: 80vh;
+            border-radius: 8px;
+            border-top: 4px solid var(--accent-blue);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .modal-close {
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .tab-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 10px;
+        }
+
+        .tab-item {
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding-bottom: 5px;
+        }
+
+        .tab-item.active {
+            color: var(--accent-blue);
+            border-bottom: 2px solid var(--accent-blue);
+        }
+
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active { display: block; }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .data-table th, .data-table td {
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 8px;
+            text-align: left;
+            font-size: 13px;
+        }
+        .data-table th { color: var(--text-secondary); background: rgba(0,0,0,0.2); }
+        .val-abnormal { color: var(--alert-red); font-weight: bold; }
+
+        /* 右下角呼叫弹窗 */
+        .call-popup {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 350px;
+            background: var(--panel-bg);
+            border: 2px solid var(--alert-red);
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(255, 77, 79, 0.4);
+            z-index: 50;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .call-popup.active { display: flex; }
+
+        .call-header {
+            background: var(--alert-red);
+            color: white;
+            padding: 10px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .call-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .call-item {
+            padding: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* 便签浮层 */
+        .note-popup {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 300px;
+            height: 400px;
+            background: #ffffcc;
+            color: #333;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            z-index: 50;
+            display: none;
+            flex-direction: column;
+            padding: 15px;
+        }
+
+        .note-popup.active { display: flex; }
+
+        .note-list {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #ccc;
+        }
+
+        .note-item {
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+        }
+
+        .note-input {
+            width: 100%;
+            padding: 5px;
+            box-sizing: border-box;
+        }
+
+        /* 右侧配置抽屉占位 */
+        .config-drawer {
+            position: fixed;
+            top: 0; right: -400px; bottom: 0;
+            width: 400px;
+            background: var(--panel-bg);
+            z-index: 90;
+            box-shadow: -5px 0 15px rgba(0,0,0,0.5);
+            padding: 20px;
+            transition: right 0.3s ease;
+        }
+        .config-drawer.active { right: 0; }
+        .config-overlay {
+            position: fixed; top:0; left:0; right:0; bottom:0;
+            background: rgba(0,0,0,0.4); z-index: 89; display: none;
+        }
+        .config-overlay.active { display: block; }
+
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <!-- 顶部 T区 -->
+    <header class="header-t">
+        <div class="stats-group">
+            <div class="stat-item">
+                <span class="stat-label">病区总数</span>
+                <span class="stat-value">20</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">在床</span>
+                <span class="stat-value" id="statOcc">16</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">空床</span>
+                <span class="stat-value" style="color: var(--accent-green)" id="statEmpty">4</span>
+            </div>
+        </div>
+        
+        <!-- 危急值走马灯 -->
+        <div class="marquee-container">
+            <div class="marquee-content" id="marqueeContent">
+                <!-- JS 动态填充 -->
+            </div>
+        </div>
+    </header>
+
+    <!-- 主体区 -->
+    <main class="main-content">
+        <!-- 左侧 L区 -->
+        <section class="left-l">
+            <div class="toolbar">
+                <div class="filter-group">
+                    <button class="btn active" onclick="filterBeds('all')">全部</button>
+                    <button class="btn" onclick="filterBeds('发热')">发热</button>
+                    <button class="btn" onclick="filterBeds('手术')">手术</button>
+                    <button class="btn" onclick="filterBeds('欠费')">欠费</button>
+                </div>
+                <div class="action-group">
+                    <button class="btn" onclick="togglePrivacy()">🔒 隐私模式</button>
+                    <button class="btn" onclick="openConfig()">⚙️ 配置</button>
+                </div>
+            </div>
+            
+            <div class="bed-grid" id="bedGrid">
+                <!-- JS 动态填充 -->
+            </div>
+        </section>
+
+        <!-- 右侧动态区 -->
+        <aside class="right-dynamic">
+            <div class="dynamic-card" style="flex:1;">
+                <div class="dynamic-title">病区动态</div>
+                <div class="dynamic-list">
+                    <div class="dynamic-row"><span>今日出院</span><span style="color:var(--accent-green)">2人</span></div>
+                    <div class="dynamic-row"><span>今日入院</span><span style="color:var(--accent-blue)">1人</span></div>
+                    <div class="dynamic-row"><span>明日手术</span><span>3人</span></div>
+                    <div class="dynamic-row"><span>外借物品</span><span style="color:var(--alert-yellow)">1项</span></div>
+                </div>
+            </div>
+
+            <div class="dynamic-card" style="flex:2;">
+                <div class="dynamic-title">今日手术</div>
+                <div class="dynamic-list">
+                    <div class="dynamic-row">
+                        <span>03床-李建国</span>
+                        <span style="color:var(--accent-blue)">阑尾切除术(未完成)</span>
+                    </div>
+                    <div class="dynamic-row">
+                        <span>11床-王芳</span>
+                        <span style="color:var(--text-secondary)">胆囊切除术(已完成)</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dynamic-card" style="flex:2;">
+                <div class="dynamic-title">检查安排</div>
+                <div class="dynamic-list">
+                    <div class="dynamic-row">
+                        <span>05床-赵丽</span>
+                        <span>腹部CT (09:30)</span>
+                    </div>
+                    <div class="dynamic-row">
+                        <span>12床-孙强</span>
+                        <span>心电图 (10:00)</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dynamic-card" style="flex:2;">
+                <div class="dynamic-title">今日排班</div>
+                <div class="dynamic-list staff-grid">
+                    <div class="staff-item">责护: 张护士</div>
+                    <div class="staff-item">治护: 李护士</div>
+                    <div class="staff-item">晚班: 王护士</div>
+                    <div class="staff-item">夜班: 刘护士</div>
+                </div>
+            </div>
+        </aside>
+    </main>
+</div>
+
+<!-- 右下角呼叫弹窗 -->
+<div class="call-popup" id="callPopup">
+    <div class="call-header">
+        <span>⚠️ 呼叫/增援提醒</span>
+        <span id="callCount">0</span>
+    </div>
+    <div class="call-list" id="callList">
+        <!-- JS 动态填充 -->
+    </div>
+</div>
+
+<!-- 便签浮层 -->
+<div class="note-popup" id="notePopup">
+    <h3 style="margin-bottom:10px; color:#333;">电子白板</h3>
+    <div class="note-list" id="noteList"></div>
+    <div style="display:flex; gap:5px;">
+        <input type="text" class="note-input" id="noteInput" placeholder="输入便签内容...">
+        <button class="btn" style="background:#00f0ff; color:#000;" onclick="addNote()">添加</button>
+    </div>
+</div>
+
+<!-- 患者详情弹窗 -->
+<div class="overlay" id="detailOverlay">
+    <div class="detail-modal">
+        <div class="modal-header">
+            <h2 id="modalTitle">患者详情</h2>
+            <span class="modal-close" onclick="closeDetail()">×</span>
+        </div>
+        <div class="modal-body">
+            <div class="tab-group">
+                <div class="tab-item active" onclick="switchTab(this, 'tab-sign')">体征</div>
+                <div class="tab-item" onclick="switchTab(this, 'tab-order')">医嘱</div>
+                <div class="tab-item" onclick="switchTab(this, 'tab-lab')">检验</div>
+                <div class="tab-item" onclick="switchTab(this, 'tab-fee')">费用</div>
+                <div class="tab-item" onclick="switchTab(this, 'tab-record')">病历</div>
+            </div>
+
+            <div class="tab-content active" id="tab-sign">
+                <table class="data-table">
+                    <thead><tr><th>时间</th><th>体温</th><th>心率</th><th>血压</th></tr></thead>
+                    <tbody>
+                        <tr><td>08:00</td><td>36.5</td><td>80</td><td>120/80</td></tr>
+                        <tr><td>昨日22:00</td><td>37.2</td><td>85</td><td>125/82</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="tab-content" id="tab-order">
+                <p>长期医嘱：二级护理，普食</p>
+                <p>临时医嘱：心电图</p>
+            </div>
+            <div class="tab-content" id="tab-lab">
+                <table class="data-table">
+                    <thead><tr><th>项目</th><th>结果</th><th>参考值</th></tr></thead>
+                    <tbody>
+                        <tr><td>白细胞</td><td class="val-abnormal">12.5</td><td>4-10</td></tr>
+                        <tr><td>血红蛋白</td><td>120</td><td>110-150</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="tab-content" id="tab-fee">费用明细展示区...</div>
+            <div class="tab-content" id="tab-record">入院记录与病程展示区...</div>
+        </div>
+    </div>
+</div>
+
+<!-- 配置抽屉与遮罩 -->
+<div class="config-overlay" id="configOverlay" onclick="closeConfig()"></div>
+<div class="config-drawer" id="configDrawer">
+    <h2 style="margin-bottom: 20px;">系统配置</h2>
+    <p>此处配置模块显隐、状态图标自定义等功能...</p>
+    <button class="btn" onclick="closeConfig()" style="margin-top:20px;">关闭抽屉</button>
+</div>
+
+
+<script>
+    // === 模拟数据源 ===
+    const beds = [
+        { id: '01', status: 'EMPTY' },
+        { id: '02', status: 'OCCUPIED', patient: { name: '张建国', level: '1', levelText: '一级', allergy: '', icons: ['发热'] }, alert: null },
+        { id: '03', status: 'OCCUPIED', patient: { name: '李华', level: 'special', levelText: '特级', allergy: '青霉素', icons: ['手术'] }, alert: 'CRITICAL' },
+        { id: '04', status: 'OCCUPIED', patient: { name: '王芳', level: '2', levelText: '二级', allergy: '', icons: [] }, alert: null },
+        { id: '05', status: 'OCCUPIED', patient: { name: '赵丽', level: '3', levelText: '三级', allergy: '', icons: ['欠费'] }, alert: 'CALL' },
+        { id: '06', status: 'EMPTY' },
+        { id: '07', status: 'OCCUPIED', patient: { name: '孙强', level: '2', levelText: '二级', allergy: '', icons: [] }, alert: null },
+        { id: '08', status: 'OCCUPIED', patient: { name: '周梅', level: '1', levelText: '一级', allergy: '海鲜', icons: ['发热', '手术'] }, alert: 'CALL' },
+        { id: '09', status: 'EMPTY' },
+        { id: '10', status: 'OCCUPIED', patient: { name: '吴东', level: '3', levelText: '三级', allergy: '', icons: [] }, alert: null },
+        { id: '11', status: 'OCCUPIED', patient: { name: '郑洁', level: '2', levelText: '二级', allergy: '', icons: ['手术'] }, alert: null },
+        { id: '12', status: 'OCCUPIED', patient: { name: '陈浩', level: '1', levelText: '一级', allergy: '', icons: ['发热'] }, alert: 'CRITICAL' },
+    ];
+
+    let isPrivacyMode = false;
+    let currentFilter = 'all';
+    let notes = [];
+
+    // === 渲染床位网格 ===
+    function renderBeds() {
+        const grid = document.getElementById('bedGrid');
+        grid.innerHTML = '';
+
+        beds.forEach(bed => {
+            // 筛选逻辑
+            if (bed.status === 'OCCUPIED' && currentFilter !== 'all' && !bed.patient.icons.includes(currentFilter)) {
+                return;
+            }
+
+            const card = document.createElement('div');
+            card.className = 'bed-card';
+            
+            if (bed.status === 'EMPTY') {
+                card.classList.add('empty');
+                card.innerHTML = `<div class="bed-header"><span class="bed-no">${bed.id}床</span></div><div style="text-align:center; color:var(--text-secondary); margin-top:20px;">空床</div>`;
+            } else {
+                // 护理级别色条
+                const levelClass = bed.patient.level === 'special' ? 'level-special' : `level-${bed.patient.level}`;
+                card.classList.add(levelClass);
+
+                // 闪烁预警
+                if (bed.alert) {
+                    card.classList.add('alert-blink');
+                }
+
+                // 隐私模式脱敏
+                const displayName = isPrivacyMode ? bed.patient.name.charAt(0) + '**' : bed.patient.name;
+                
+                // 状态图标渲染
+                let iconsHtml = '';
+                if (bed.patient.icons.includes('发热')) iconsHtml += '<span class="icon-badge icon-fever">🔴发热</span>';
+                if (bed.patient.icons.includes('手术')) iconsHtml += '<span class="icon-badge icon-surgery">🔵手术</span>';
+                if (bed.patient.icons.includes('欠费')) iconsHtml += '<span class="icon-badge" style="color:var(--alert-yellow)">🟡欠费</span>';
+                
+                // 过敏标识
+                let allergyHtml = bed.patient.allergy ? `<span style="color:var(--alert-red); font-size:12px; margin-left:5px;">⚠过敏:${bed.patient.allergy}</span>` : '';
+
+                card.innerHTML = `
+                    <div class="bed-header">
+                        <span class="bed-no">${bed.id}床</span>
+                        <span class="level-tag tag-${bed.patient.level}">${bed.patient.levelText}</span>
+                    </div>
+                    <div style="display:flex; align-items:center;">
+                        <span class="patient-name">${displayName}</span>${allergyHtml}
+                    </div>
+                    <div class="patient-info">医生: 张医生 | 护士: 李护士</div>
+                    <div class="status-icons">${iconsHtml}</div>
+                `;
+
+                // 点击弹出详情
+                card.onclick = () => openDetail(bed);
+            }
+            grid.appendChild(card);
+        });
+    }
+
+    // === 预警与呼叫逻辑 ===
+    function renderAlerts() {
+        const marquee = document.getElementById('marqueeContent');
+        const callList = document.getElementById('callList');
+        const callPopup = document.getElementById('callPopup');
+        const callCount = document.getElementById('callCount');
+        
+        let marqueeHtml = '';
+        let callHtml = '';
+        let callNum = 0;
+
+        beds.forEach(bed => {
+            if (bed.status === 'OCCUPIED' && bed.alert) {
+                if (bed.alert === 'CRITICAL') {
+                    marqueeHtml += `<div class="alert-item">⚠️ 危急值: ${bed.id}床 ${bed.patient.name} - 血钾 6.5mmol/L [未处理]</div>`;
+                } else if (bed.alert === 'CALL') {
+                    marqueeHtml += `<div class="alert-item">🚨 呼叫: ${bed.id}床 ${bed.patient.name} [呼叫中]</div>`;
+                    callNum++;
+                    callHtml += `
+                        <div class="call-item">
+                            <div>
+                                <div style="font-weight:bold; color:var(--alert-red);">${bed.id}床 ${bed.patient.name}</div>
+                                <div style="font-size:12px; color:var(--text-secondary);">输液呼叫</div>
+                            </div>
+                            <button class="btn btn-danger" onclick="dismissCall('${bed.id}', event)">知悉</button>
+                        </div>
+                    `;
+                }
+            }
+        });
+
+        marquee.innerHTML = marqueeHtml || '<div style="color:var(--accent-green)">系统正常，暂无预警</div>';
+        callList.innerHTML = callHtml;
+        callCount.innerText = callNum;
+
+        // 控制右下角呼叫弹窗显示
+        if (callNum > 0) {
+            callPopup.classList.add('active');
+        } else {
+            callPopup.classList.remove('active');
+        }
+    }
+
+    function dismissCall(bedId, event) {
+        event.stopPropagation();
+        const bed = beds.find(b => b.id === bedId);
+        if(bed) bed.alert = null;
+        renderAlerts();
+        renderBeds(); // 移除闪烁
+    }
+
+    // === 患者详情弹窗 ===
+    function openDetail(bed) {
+        const overlay = document.getElementById('detailOverlay');
+        document.getElementById('modalTitle').innerText = `${bed.id}床 - ${bed.patient.name} 详情`;
+        overlay.classList.add('active');
+    }
+
+    function closeDetail() {
+        document.getElementById('detailOverlay').classList.remove('active');
+    }
+
+    function switchTab(el, tabId) {
+        // 切换Tab样式
+        el.parentElement.querySelectorAll('.tab-item').forEach(e => e.classList.remove('active'));
+        el.classList.add('active');
+        // 切换内容
+        document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+    }
+
+    // === 工具栏功能 ===
+    function togglePrivacy() {
+        isPrivacyMode = !isPrivacyMode;
+        alert(`隐私模式已${isPrivacyMode ? '开启' : '关闭'}`);
+        renderBeds();
+    }
+
+    function filterBeds(type) {
+        currentFilter = type;
+        document.querySelectorAll('.filter-group .btn').forEach(btn => {
+            btn.classList.toggle('active', btn.innerText.includes(type === 'all' ? '全部' : type));
+        });
+        renderBeds();
+    }
+
+    // === 便签功能 ===
+    function toggleNote() {
+        document.getElementById('notePopup').classList.toggle('active');
+    }
+
+    function addNote() {
+        const input = document.getElementById('noteInput');
+        if(input.value.trim() === '') return;
+        if(notes.length >= 100) {
+            alert('便签已达上限(100条)，请删除后再添加！');
+            return;
+        }
+        notes.push(input.value.trim());
+        input.value = '';
+        renderNotes();
+    }
+
+    function renderNotes() {
+        const list = document.getElementById('noteList');
+        list.innerHTML = notes.map((n, i) => `
+            <div class="note-item">
+                <span>${i+1}. ${n}</span>
+                <span style="cursor:pointer; color:red;" onclick="notes.splice(${i},1); renderNotes();">x</span>
+            </div>
+        `).join('');
+    }
+
+    // === 配置抽屉 ===
+    function openConfig() {
+        let pwd = prompt("请输入工号密码验证身份："); // 简易模拟密码拦截
+        if(pwd === '123456') {
+            document.getElementById('configOverlay').classList.add('active');
+            document.getElementById('configDrawer').classList.add('active');
+        } else if(pwd !== null) {
+            alert("工号或密码错误，禁止进入配置！");
+        }
+    }
+
+    function closeConfig() {
+        document.getElementById('configOverlay').classList.remove('active');
+        document.getElementById('configDrawer').classList.remove('active');
+    }
+
+
+    // === 初始化 ===
+    window.onload = () => {
+        renderBeds();
+        renderAlerts();
+    };
+
+</script>
+</body>
+</html>
